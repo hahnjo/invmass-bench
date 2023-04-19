@@ -58,7 +58,8 @@ void SanityCheck(const std::vector<float> &results) {
 
 // original
 template <typename T>
-T InvariantMassBaseline(T *pt, T *eta, T *phi, T *mass, std::size_t size) {
+T InvariantMassBaseline(const T *pt, const T *eta, const T *phi, const T *mass,
+                        std::size_t size) {
   T x_sum = 0.;
   T y_sum = 0.;
   T z_sum = 0.;
@@ -111,8 +112,8 @@ BENCHMARK(Baseline);
 
 template <typename T>
 void InvariantMassBulk(const std::vector<bool> &eventMask, std::size_t bulkSize,
-                       std::vector<T> &results, T *pt, T *eta, T *phi, T *mass,
-                       std::size_t *sizes) {
+                       std::vector<T> &results, const T *pt, const T *eta,
+                       const T *phi, const T *mass, const std::size_t *sizes) {
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0; i < bulkSize; ++i) {
     if (eventMask[i]) {
@@ -160,8 +161,8 @@ BENCHMARK(Bulk);
 template <typename T>
 void InvariantMassBulkIgnoreMask(const std::vector<bool> &eventMask,
                                  std::size_t bulkSize, std::vector<T> &results,
-                                 T *pt, T *eta, T *phi, T *mass,
-                                 std::size_t *sizes) {
+                                 const T *pt, const T *eta, const T *phi,
+                                 const T *mass, const std::size_t *sizes) {
 
   const auto nElements = std::accumulate(sizes, sizes + bulkSize, 0u);
 
