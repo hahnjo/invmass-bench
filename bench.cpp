@@ -8,7 +8,7 @@
 
 struct Input {
   std::size_t bulkSize;
-  std::vector<bool> requestedMask;
+  std::vector<bool> eventMask;
   float *pts;
   float *etas;
   float *phis;
@@ -22,12 +22,12 @@ Input MakeInput() {
 
   std::size_t bulkSize = 1000 + rand(e) * 2;
   std::size_t *sizes = new std::size_t[bulkSize];
-  std::vector<bool> requestedMask(bulkSize);
+  std::vector<bool> eventMask(bulkSize);
   std::size_t nElements = 0u;
   for (std::size_t i = 0u; i < bulkSize; ++i) {
     double val = rand(e);
     sizes[i] = val * 5;
-    requestedMask[i] = val > 0.6;
+    eventMask[i] = val > 0.6;
     nElements += sizes[i];
   }
 
@@ -44,7 +44,7 @@ Input MakeInput() {
     masses[i] = val;
   }
 
-  return Input{bulkSize, requestedMask, pts, etas, phis, masses, sizes};
+  return Input{bulkSize, eventMask, pts, etas, phis, masses, sizes};
 }
 
 static const auto input = MakeInput();
@@ -81,19 +81,15 @@ T InvariantMassBaseline(T *pt, T *eta, T *phi, T *mass, std::size_t size) {
                    z_sum * z_sum);
 }
 
-void EvalDefineBaseline(std::size_t bulkSize,
-                        const std::vector<bool> &requestedMask, float *pts,
-                        float *etas, float *phis, float *masses,
-                        std::size_t *sizes, std::vector<float> &results,
-                        std::vector<bool> &currentMask) {
+void EvalLoop(std::size_t bulkSize, const std::vector<bool> &eventMask,
+              float *pts, float *etas, float *phis, float *masses,
+              std::size_t *sizes, std::vector<float> &results) {
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0ul; i < bulkSize; ++i) {
-    if (requestedMask[i] &&
-        !currentMask[i]) { // we don't have a value for this entry yet
+    if (eventMask[i]) { // we don't have a value for this entry yet
       results[i] = InvariantMassBaseline(pts + elementIdx, etas + elementIdx,
                                          phis + elementIdx, masses + elementIdx,
                                          sizes[i]);
-      currentMask[i] = true;
     }
     elementIdx += sizes[i];
   }
@@ -103,12 +99,9 @@ static void Baseline(benchmark::State &state) {
   std::vector<float> results(input.bulkSize);
   benchmark::DoNotOptimize(results);
   for (auto _ : state) {
-    std::vector<bool> currentMask(input.bulkSize, false);
-    benchmark::DoNotOptimize(currentMask);
-    EvalDefineBaseline(input.bulkSize, input.requestedMask, input.pts,
-                       input.etas, input.phis, input.masses, input.sizes,
-                       results, currentMask);
-    // to force writing to memory of results and currentMask
+    EvalLoop(input.bulkSize, input.eventMask, input.pts, input.etas, input.phis,
+             input.masses, input.sizes, results);
+    // to force writing to memory of results
     benchmark::ClobberMemory();
   }
 
@@ -117,13 +110,12 @@ static void Baseline(benchmark::State &state) {
 BENCHMARK(Baseline);
 
 template <typename T>
-void InvariantMassBulk(const std::vector<bool> &requestedMask,
-                       std::vector<bool> &currentMask, std::size_t bulkSize,
+void InvariantMassBulk(const std::vector<bool> &eventMask, std::size_t bulkSize,
                        std::vector<T> &results, T *pt, T *eta, T *phi, T *mass,
                        std::size_t *sizes) {
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0; i < bulkSize; ++i) {
-    if (requestedMask[i] && !currentMask[i]) {
+    if (eventMask[i]) {
 
       T x_sum = 0.;
       T y_sum = 0.;
@@ -155,12 +147,9 @@ static void Bulk(benchmark::State &state) {
   std::vector<float> results(input.bulkSize);
   benchmark::DoNotOptimize(results);
   for (auto _ : state) {
-    std::vector<bool> currentMask(input.bulkSize, false);
-    benchmark::DoNotOptimize(currentMask);
-    InvariantMassBulk(input.requestedMask, currentMask, input.bulkSize, results,
-                      input.pts, input.etas, input.phis, input.masses,
-                      input.sizes);
-    // to force writing to memory of results and currentMask
+    InvariantMassBulk(input.eventMask, input.bulkSize, results, input.pts,
+                      input.etas, input.phis, input.masses, input.sizes);
+    // to force writing to memory of results
     benchmark::ClobberMemory();
   }
 
@@ -169,8 +158,7 @@ static void Bulk(benchmark::State &state) {
 BENCHMARK(Bulk);
 
 template <typename T>
-void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
-                                 std::vector<bool> &currentMask,
+void InvariantMassBulkIgnoreMask(const std::vector<bool> &eventMask,
                                  std::size_t bulkSize, std::vector<T> &results,
                                  T *pt, T *eta, T *phi, T *mass,
                                  std::size_t *sizes) {
@@ -183,11 +171,12 @@ void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
   std::vector<T> es2(nElements);
   std::vector<T> es(nElements);
 
-  // trigonometric functions are expensive and don't vectorize so we only call them when needed
+  // trigonometric functions are expensive and don't vectorize so we only call
+  // them when needed
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0u; i < bulkSize; ++i) {
     const auto size = sizes[i];
-    if (requestedMask[i] && !currentMask[i]) {
+    if (eventMask[i]) {
       for (std::size_t j = 0u; j < size; ++j) {
         const auto pt_ = pt[elementIdx + j];
         const auto phi_ = phi[elementIdx + j];
@@ -199,7 +188,8 @@ void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
     elementIdx += size;
   }
 
-  // looks like the CPU is happier by calculating these for all elements, even if we'll discard many of the results...
+  // looks like the CPU is happier by calculating these for all elements, even
+  // if we'll discard many of the results...
   for (std::size_t i = 0; i < nElements; ++i) {
     es2[i] = pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i];
   }
@@ -215,7 +205,7 @@ void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
     T z_sum = 0.;
     T e_sum = 0.;
     const auto size = sizes[i];
-    if (requestedMask[i] && !currentMask[i]) {
+    if (eventMask[i]) {
       for (std::size_t j = 0u; j < sizes[i]; ++j) {
         const auto idx = elementIdx + j;
         x_sum += xs[idx];
@@ -234,12 +224,10 @@ static void BulkIgnoreMask(benchmark::State &state) {
   std::vector<float> results(input.bulkSize);
   benchmark::DoNotOptimize(results);
   for (auto _ : state) {
-    std::vector<bool> currentMask(input.bulkSize, false);
-    benchmark::DoNotOptimize(currentMask);
-    InvariantMassBulkIgnoreMask(input.requestedMask, currentMask,
-                                input.bulkSize, results, input.pts, input.etas,
-                                input.phis, input.masses, input.sizes);
-    // to force writing to memory of results and currentMask
+    InvariantMassBulkIgnoreMask(input.eventMask, input.bulkSize, results,
+                                input.pts, input.etas, input.phis, input.masses,
+                                input.sizes);
+    // to force writing to memory of results
     benchmark::ClobberMemory();
   }
 
