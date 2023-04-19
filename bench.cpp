@@ -2,8 +2,8 @@
 
 #include <cmath>
 #include <numeric> // std::accumulate
-#include <stdexcept>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
 struct Input {
@@ -48,6 +48,13 @@ Input MakeInput() {
 }
 
 static const auto input = MakeInput();
+
+void SanityCheck(const std::vector<float> &results) {
+  const auto sum = std::accumulate(results.begin(), results.end(), 0.);
+  if (std::abs(sum - 736.624) > 1e-5)
+    std::runtime_error("Sanity check failed: sum of results was " +
+                       std::to_string(sum) + " instead of 736.624");
+}
 
 // original
 template <typename T>
@@ -105,10 +112,7 @@ static void Baseline(benchmark::State &state) {
     benchmark::ClobberMemory();
   }
 
-  const auto sanityCheck = std::accumulate(results.begin(), results.end(), 0.);
-  if (std::abs(sanityCheck - 736.624) > 1e-5)
-    std::runtime_error("Sanity check failed: result was " +
-                       std::to_string(sanityCheck) + " instead of 736.624");
+  SanityCheck(results);
 }
 BENCHMARK(Baseline);
 
@@ -117,9 +121,7 @@ void InvariantMassBulk(const std::vector<bool> &requestedMask,
                        std::vector<bool> &currentMask, std::size_t bulkSize,
                        std::vector<T> &results, T *pt, T *eta, T *phi, T *mass,
                        std::size_t *sizes) {
-
   std::size_t elementIdx = 0u;
-
   for (std::size_t i = 0; i < bulkSize; ++i) {
     if (requestedMask[i] && !currentMask[i]) {
 
@@ -149,32 +151,98 @@ void InvariantMassBulk(const std::vector<bool> &requestedMask,
   }
 }
 
-void EvalBulkDefine(std::size_t bulkSize,
-                    const std::vector<bool> &requestedMask, float *pts,
-                    float *etas, float *phis, float *masses, std::size_t *sizes,
-                    std::vector<float> &results,
-                    std::vector<bool> &currentMask) {
-  InvariantMassBulk(requestedMask, currentMask, bulkSize, results, pts, etas,
-                    phis, masses, sizes);
-}
-
-static void Optimized(benchmark::State &state) {
+static void Bulk(benchmark::State &state) {
   std::vector<float> results(input.bulkSize);
   benchmark::DoNotOptimize(results);
   for (auto _ : state) {
     std::vector<bool> currentMask(input.bulkSize, false);
     benchmark::DoNotOptimize(currentMask);
-    EvalBulkDefine(input.bulkSize, input.requestedMask, input.pts, input.etas,
-                   input.phis, input.masses, input.sizes, results, currentMask);
+    InvariantMassBulk(input.requestedMask, currentMask, input.bulkSize, results,
+                      input.pts, input.etas, input.phis, input.masses,
+                      input.sizes);
     // to force writing to memory of results and currentMask
     benchmark::ClobberMemory();
   }
 
-  const auto sanityCheck = std::accumulate(results.begin(), results.end(), 0.);
-  if (std::abs(sanityCheck - 736.624) > 1e-5)
-    std::runtime_error("Sanity check failed: result was " +
-                       std::to_string(sanityCheck) + " instead of 736.624");
+  SanityCheck(results);
 }
-BENCHMARK(Optimized);
+BENCHMARK(Bulk);
+
+template <typename T>
+void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
+                                 std::vector<bool> &currentMask,
+                                 std::size_t bulkSize, std::vector<T> &results,
+                                 T *pt, T *eta, T *phi, T *mass,
+                                 std::size_t *sizes) {
+
+  const auto nElements = std::accumulate(sizes, sizes + bulkSize, 0u);
+
+  std::vector<T> xs(nElements);
+  std::vector<T> ys(nElements);
+  std::vector<T> zs(nElements);
+  std::vector<T> es2(nElements);
+  std::vector<T> es(nElements);
+  T x_sum = 0.;
+  T y_sum = 0.;
+  T z_sum = 0.;
+  T e_sum = 0.;
+
+  for (std::size_t i = 0; i < nElements; ++i) {
+    const auto pt_ = pt[i];
+    const auto phi_ = phi[i];
+    // here's hoping the compiler uses a built-in sincos
+    xs[i] = pt_ * std::cos(phi_);
+    ys[i] = pt_ * std::sin(phi_);
+  }
+
+  for (std::size_t i = 0; i < nElements; ++i) {
+    zs[i] = pt[i] * std::sinh(eta[i]);
+    es2[i] = pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i];
+  }
+
+  for (std::size_t i = 0; i < nElements; ++i) {
+    // this sqrt is the hottest instruction and I'm trying to help the compiler
+    // vectorize it
+    es[i] = std::sqrt(es2[i]);
+  }
+
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0; i < bulkSize; ++i) {
+    T x_sum = 0.;
+    T y_sum = 0.;
+    T z_sum = 0.;
+    T e_sum = 0.;
+    const auto size = sizes[i];
+    if (requestedMask[i] && !currentMask[i]) {
+      for (std::size_t j = 0u; j < sizes[i]; ++j) {
+        const auto idx = elementIdx + j;
+        x_sum += xs[idx];
+        y_sum += ys[idx];
+        z_sum += zs[idx];
+        e_sum += es[idx];
+      }
+      results[i] = std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                             z_sum * z_sum);
+    }
+    elementIdx += size;
+  }
+}
+
+static void BulkIgnoreMask(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    std::vector<bool> currentMask(input.bulkSize, false);
+    benchmark::DoNotOptimize(currentMask);
+    InvariantMassBulkIgnoreMask(input.requestedMask, currentMask,
+                                input.bulkSize, results, input.pts, input.etas,
+                                input.phis, input.masses, input.sizes);
+    // to force writing to memory of results and currentMask
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BulkIgnoreMask);
 
 BENCHMARK_MAIN();
