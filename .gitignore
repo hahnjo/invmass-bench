@@ -1,0 +1,4 @@
+.gdb_history
+*.data
+*.data.old
+tags
