@@ -182,31 +182,33 @@ void InvariantMassBulkIgnoreMask(const std::vector<bool> &requestedMask,
   std::vector<T> zs(nElements);
   std::vector<T> es2(nElements);
   std::vector<T> es(nElements);
-  T x_sum = 0.;
-  T y_sum = 0.;
-  T z_sum = 0.;
-  T e_sum = 0.;
 
-  for (std::size_t i = 0; i < nElements; ++i) {
-    const auto pt_ = pt[i];
-    const auto phi_ = phi[i];
-    // here's hoping the compiler uses a built-in sincos
-    xs[i] = pt_ * std::cos(phi_);
-    ys[i] = pt_ * std::sin(phi_);
+  // trigonometric functions are expensive and don't vectorize so we only call them when needed
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0u; i < bulkSize; ++i) {
+    const auto size = sizes[i];
+    if (requestedMask[i] && !currentMask[i]) {
+      for (std::size_t j = 0u; j < size; ++j) {
+        const auto pt_ = pt[elementIdx + j];
+        const auto phi_ = phi[elementIdx + j];
+        xs[i] = pt_ * std::cos(phi_);
+        ys[i] = pt_ * std::sin(phi_);
+        zs[i] = pt_ * std::sinh(eta[elementIdx + j]);
+      }
+    }
+    elementIdx += size;
   }
 
+  // looks like the CPU is happier by calculating these for all elements, even if we'll discard many of the results...
   for (std::size_t i = 0; i < nElements; ++i) {
-    zs[i] = pt[i] * std::sinh(eta[i]);
     es2[i] = pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i];
   }
 
   for (std::size_t i = 0; i < nElements; ++i) {
-    // this sqrt is the hottest instruction and I'm trying to help the compiler
-    // vectorize it
     es[i] = std::sqrt(es2[i]);
   }
 
-  std::size_t elementIdx = 0u;
+  elementIdx = 0u;
   for (std::size_t i = 0; i < bulkSize; ++i) {
     T x_sum = 0.;
     T y_sum = 0.;
