@@ -236,4 +236,88 @@ static void BulkIgnoreMask(benchmark::State &state) {
 }
 BENCHMARK(BulkIgnoreMask);
 
+float SimpleSinh(float x) {
+  const auto e = std::exp(x);
+  return 0.5 * (e - 1. / e);
+}
+
+template <typename T>
+void InvMassBulkIgnoreMaskCustomSinH(const std::vector<bool> &eventMask,
+                                     std::size_t bulkSize,
+                                     std::vector<T> &results, const T *pt,
+                                     const T *eta, const T *phi, const T *mass,
+                                     const std::size_t *sizes) {
+
+  const auto nElements = std::accumulate(sizes, sizes + bulkSize, 0u);
+
+  std::vector<T> xs(nElements);
+  std::vector<T> ys(nElements);
+  std::vector<T> zs(nElements);
+  std::vector<T> es2(nElements);
+  std::vector<T> es(nElements);
+
+  // trigonometric functions are expensive and don't vectorize so we only call
+  // them when needed
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0u; i < bulkSize; ++i) {
+    const auto size = sizes[i];
+    if (eventMask[i]) {
+      for (std::size_t j = 0u; j < size; ++j) {
+        const auto pt_ = pt[elementIdx + j];
+        const auto phi_ = phi[elementIdx + j];
+        xs[i] = pt_ * std::cos(phi_);
+        ys[i] = pt_ * std::sin(phi_);
+        zs[i] = pt_ * SimpleSinh(eta[elementIdx + j]);
+      }
+    }
+    elementIdx += size;
+  }
+
+  // looks like the CPU is happier by calculating these for all elements, even
+  // if we'll discard many of the results...
+  for (std::size_t i = 0; i < nElements; ++i) {
+    es2[i] = pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i];
+  }
+
+  for (std::size_t i = 0; i < nElements; ++i) {
+    es[i] = std::sqrt(es2[i]);
+  }
+
+  elementIdx = 0u;
+  for (std::size_t i = 0; i < bulkSize; ++i) {
+    T x_sum = 0.;
+    T y_sum = 0.;
+    T z_sum = 0.;
+    T e_sum = 0.;
+    const auto size = sizes[i];
+    if (eventMask[i]) {
+      for (std::size_t j = 0u; j < sizes[i]; ++j) {
+        const auto idx = elementIdx + j;
+        x_sum += xs[idx];
+        y_sum += ys[idx];
+        z_sum += zs[idx];
+        e_sum += es[idx];
+      }
+      results[i] = std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                             z_sum * z_sum);
+    }
+    elementIdx += size;
+  }
+}
+
+static void BulkIgnoreMaskSimpleSinh(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    InvMassBulkIgnoreMaskCustomSinH(input.eventMask, input.bulkSize, results,
+                                    input.pts, input.etas, input.phis,
+                                    input.masses, input.sizes);
+    // to force writing to memory of results
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BulkIgnoreMaskSimpleSinh);
+
 BENCHMARK_MAIN();
