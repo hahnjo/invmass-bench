@@ -6,5 +6,5 @@ The only requirement is [google/benchmark](https://github.com/google/benchmark).
 Assuming the compiler knows where to find its headers and libraries, this should work:
 
 ```
-$ g++ -O2 -o bench bench.cpp -lbenchmark
+$ g++ -O3 -o bench bench.cpp -lbenchmark
 ```
