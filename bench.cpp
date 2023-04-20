@@ -56,6 +56,11 @@ void SanityCheck(const std::vector<float> &results) {
                        std::to_string(sum) + " instead of 736.624");
 }
 
+float SimpleSinh(float x) {
+  const auto e = std::exp(x);
+  return 0.5 * (e - 1. / e);
+}
+
 // original
 template <typename T>
 T InvariantMassBaseline(const T *pt, const T *eta, const T *phi, const T *mass,
@@ -109,6 +114,60 @@ static void Baseline(benchmark::State &state) {
   SanityCheck(results);
 }
 BENCHMARK(Baseline);
+
+template <typename T>
+T InvMassBaselineSimpleSinh(const T *pt, const T *eta, const T *phi,
+                            const T *mass, std::size_t size) {
+  T x_sum = 0.;
+  T y_sum = 0.;
+  T z_sum = 0.;
+  T e_sum = 0.;
+
+  for (std::size_t i = 0u; i < size; ++i) {
+    // Convert to (e, x, y, z) coordinate system and update sums
+    const auto x = pt[i] * std::cos(phi[i]);
+    x_sum += x;
+    const auto y = pt[i] * std::sin(phi[i]);
+    y_sum += y;
+    const auto z = pt[i] * SimpleSinh(eta[i]);
+    z_sum += z;
+    const auto e = std::sqrt(x * x + y * y + z * z + mass[i] * mass[i]);
+    e_sum += e;
+  }
+
+  // Return invariant mass with (+, -, -, -) metric
+  return std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                   z_sum * z_sum);
+}
+
+void EvalLoopSimpleSinh(std::size_t bulkSize,
+                        const std::vector<bool> &eventMask, float *pts,
+                        float *etas, float *phis, float *masses,
+                        std::size_t *sizes, std::vector<float> &results) {
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0ul; i < bulkSize; ++i) {
+    if (eventMask[i]) { // we don't have a value for this entry yet
+      results[i] = InvMassBaselineSimpleSinh(
+          pts + elementIdx, etas + elementIdx, phis + elementIdx,
+          masses + elementIdx, sizes[i]);
+    }
+    elementIdx += sizes[i];
+  }
+}
+
+static void BaselineSimpleSinh(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    EvalLoop(input.bulkSize, input.eventMask, input.pts, input.etas, input.phis,
+             input.masses, input.sizes, results);
+    // to force writing to memory of results
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BaselineSimpleSinh);
 
 template <typename T>
 void InvariantMassBulk(const std::vector<bool> &eventMask, std::size_t bulkSize,
@@ -235,11 +294,6 @@ static void BulkIgnoreMask(benchmark::State &state) {
   SanityCheck(results);
 }
 BENCHMARK(BulkIgnoreMask);
-
-float SimpleSinh(float x) {
-  const auto e = std::exp(x);
-  return 0.5 * (e - 1. / e);
-}
 
 template <typename T>
 void InvMassBulkIgnoreMaskCustomSinH(const std::vector<bool> &eventMask,
