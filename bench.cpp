@@ -58,7 +58,7 @@ void SanityCheck(const std::vector<float> &results) {
 
 float SimpleSinh(float x) {
   const auto e = std::exp(x);
-  return 0.5 * (e - 1. / e);
+  return 0.5f * (e - 1.f / e);
 }
 
 // original
