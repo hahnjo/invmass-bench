@@ -51,9 +51,9 @@ static const auto input = MakeInput();
 
 void SanityCheck(const std::vector<float> &results) {
   const auto sum = std::accumulate(results.begin(), results.end(), 0.);
-  if (std::abs(sum - 736.624) > 1e-5)
-    std::runtime_error("Sanity check failed: sum of results was " +
-                       std::to_string(sum) + " instead of 736.624");
+  if (!std::isfinite(sum) || std::abs(sum - 736.623790) > 1e-5)
+    throw std::runtime_error("Sanity check failed: sum of results was " +
+                             std::to_string(sum) + " instead of 736.624");
 }
 
 float SimpleSinh(float x) {
