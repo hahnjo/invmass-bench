@@ -84,8 +84,7 @@ Running on my laptop with:
 - powersaving disabled via `cpupower frequency-set --governor performance`
 
 ```
-$ ./bench
-2023-04-19T18:15:29-06:00
+2023-04-20T16:14:56-06:00
 Running ./bench
 Run on (8 X 2300 MHz CPU s)
 CPU Caches:
@@ -93,13 +92,13 @@ CPU Caches:
   L1 Instruction 32 KiB (x8)
   L2 Unified 256 KiB (x8)
   L3 Unified 16384 KiB (x1)
-Load Average: 0.41, 0.34, 0.25
+Load Average: 0.08, 0.16, 0.56
 -------------------------------------------------------------------
 Benchmark                         Time             CPU   Iterations
 -------------------------------------------------------------------
-Baseline                      75972 ns        75929 ns         9203
-BaselineSimpleSinh            76008 ns        75965 ns         9216
-Bulk                          76825 ns        76783 ns         9118
-BulkIgnoreMask                70742 ns        70698 ns         9977
-BulkIgnoreMaskSimpleSinh      36102 ns        36080 ns        19350
+Baseline                      78665 ns        78618 ns         8878
+BaselineSimpleSinh            78656 ns        78609 ns         8889
+Bulk                          79383 ns        79337 ns         8809
+BulkIgnoreMask                70167 ns        70119 ns         9934
+BulkIgnoreMaskSimpleSinh      34266 ns        34244 ns        20397
 ```
