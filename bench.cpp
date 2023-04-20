@@ -240,9 +240,9 @@ void InvariantMassBulkIgnoreMask(const std::vector<bool> &eventMask,
       for (std::size_t j = 0u; j < size; ++j) {
         const auto pt_ = pt[elementIdx + j];
         const auto phi_ = phi[elementIdx + j];
-        xs[i] = pt_ * std::cos(phi_);
-        ys[i] = pt_ * std::sin(phi_);
-        zs[i] = pt_ * std::sinh(eta[elementIdx + j]);
+        xs[elementIdx + j] = pt_ * std::cos(phi_);
+        ys[elementIdx + j] = pt_ * std::sin(phi_);
+        zs[elementIdx + j] = pt_ * std::sinh(eta[elementIdx + j]);
       }
     }
     elementIdx += size;
@@ -319,9 +319,9 @@ void InvMassBulkIgnoreMaskCustomSinH(const std::vector<bool> &eventMask,
       for (std::size_t j = 0u; j < size; ++j) {
         const auto pt_ = pt[elementIdx + j];
         const auto phi_ = phi[elementIdx + j];
-        xs[i] = pt_ * std::cos(phi_);
-        ys[i] = pt_ * std::sin(phi_);
-        zs[i] = pt_ * SimpleSinh(eta[elementIdx + j]);
+        xs[elementIdx + j] = pt_ * std::cos(phi_);
+        ys[elementIdx + j] = pt_ * std::sin(phi_);
+        zs[elementIdx + j] = pt_ * SimpleSinh(eta[elementIdx + j]);
       }
     }
     elementIdx += size;
