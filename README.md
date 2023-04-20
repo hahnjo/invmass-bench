@@ -74,3 +74,32 @@ float InvariantMassBaseline(const float *pt, const float *eta, const float *phi,
                      z_sum * z_sum);
 }
 ```
+
+## Latest results
+
+Running on my laptop with:
+- hyperthreading turned off from BIOS
+- Intel turbo-boost turned off from BIOS
+- Intel speedstep turned off from BIOS
+- powersaving disabled via `cpupower frequency-set --governor performance`
+
+```
+$ ./bench
+2023-04-19T18:15:29-06:00
+Running ./bench
+Run on (8 X 2300 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x8)
+  L1 Instruction 32 KiB (x8)
+  L2 Unified 256 KiB (x8)
+  L3 Unified 16384 KiB (x1)
+Load Average: 0.41, 0.34, 0.25
+-------------------------------------------------------------------
+Benchmark                         Time             CPU   Iterations
+-------------------------------------------------------------------
+Baseline                      75972 ns        75929 ns         9203
+BaselineSimpleSinh            76008 ns        75965 ns         9216
+Bulk                          76825 ns        76783 ns         9118
+BulkIgnoreMask                70742 ns        70698 ns         9977
+BulkIgnoreMaskSimpleSinh      36102 ns        36080 ns        19350
+```
