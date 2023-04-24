@@ -84,23 +84,24 @@ Running on my laptop with:
 - Intel turbo-boost turned off from BIOS
 - Intel speedstep turned off from BIOS
 - powersaving disabled via `cpupower frequency-set --governor performance`
+- system otherwise idle
 
 ```
-2023-04-20T16:14:56-06:00
+2023-04-23T18:53:52-06:00
 Running ./bench
-Run on (8 X 2300 MHz CPU s)
+Run on (8 X 2300.16 MHz CPU s)
 CPU Caches:
   L1 Data 32 KiB (x8)
   L1 Instruction 32 KiB (x8)
   L2 Unified 256 KiB (x8)
   L3 Unified 16384 KiB (x1)
-Load Average: 0.08, 0.16, 0.56
+Load Average: 0.40, 0.49, 0.51
 -------------------------------------------------------------------
 Benchmark                         Time             CPU   Iterations
 -------------------------------------------------------------------
-Baseline                      78665 ns        78618 ns         8878
-BaselineSimpleSinh            78656 ns        78609 ns         8889
-Bulk                          79383 ns        79337 ns         8809
-BulkIgnoreMask                70167 ns        70119 ns         9934
-BulkIgnoreMaskSimpleSinh      34266 ns        34244 ns        20397
+Baseline                      75501 ns        75456 ns         9265
+BaselineSimpleSinh            37879 ns        37858 ns        18483
+Bulk                          76428 ns        76385 ns         9161
+BulkIgnoreMask                70023 ns        69982 ns         9972
+BulkIgnoreMaskSimpleSinh      32921 ns        32902 ns        21246
 ```
