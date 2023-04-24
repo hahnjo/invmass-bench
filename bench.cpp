@@ -16,7 +16,7 @@ struct Input {
   std::size_t *sizes;
 };
 
-Input MakeInput() {
+static Input MakeInput() {
   std::default_random_engine e(1234); // fixed seed
   std::uniform_real_distribution<double> rand(0., 1.);
 
@@ -49,7 +49,7 @@ Input MakeInput() {
 
 static const auto input = MakeInput();
 
-void SanityCheck(const std::vector<float> &results) {
+static void SanityCheck(const std::vector<float> &results) {
   const auto sum = std::accumulate(results.begin(), results.end(), 0.);
   if (!std::isfinite(sum) || std::abs(sum - 736.623790) > 1e-5)
     throw std::runtime_error("Sanity check failed: sum of results was " +
@@ -87,9 +87,9 @@ T InvariantMassBaseline(const T *pt, const T *eta, const T *phi, const T *mass,
                    z_sum * z_sum);
 }
 
-void EvalLoop(std::size_t bulkSize, const std::vector<bool> &eventMask,
-              float *pts, float *etas, float *phis, float *masses,
-              std::size_t *sizes, std::vector<float> &results) {
+static void EvalLoop(std::size_t bulkSize, const std::vector<bool> &eventMask,
+                     float *pts, float *etas, float *phis, float *masses,
+                     std::size_t *sizes, std::vector<float> &results) {
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0ul; i < bulkSize; ++i) {
     if (eventMask[i]) { // we don't have a value for this entry yet
@@ -140,10 +140,11 @@ T InvMassBaselineSimpleSinh(const T *pt, const T *eta, const T *phi,
                    z_sum * z_sum);
 }
 
-void EvalLoopSimpleSinh(std::size_t bulkSize,
-                        const std::vector<bool> &eventMask, float *pts,
-                        float *etas, float *phis, float *masses,
-                        std::size_t *sizes, std::vector<float> &results) {
+static void EvalLoopSimpleSinh(std::size_t bulkSize,
+                               const std::vector<bool> &eventMask, float *pts,
+                               float *etas, float *phis, float *masses,
+                               std::size_t *sizes,
+                               std::vector<float> &results) {
   std::size_t elementIdx = 0u;
   for (std::size_t i = 0ul; i < bulkSize; ++i) {
     if (eventMask[i]) { // we don't have a value for this entry yet
