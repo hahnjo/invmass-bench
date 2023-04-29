@@ -6,7 +6,7 @@ The only requirement is [google/benchmark](https://github.com/google/benchmark).
 Assuming the compiler knows where to find its headers and libraries, this should work:
 
 ```
-$ g++ -O3 -o bench bench.cpp -lbenchmark
+$ g++ -O3 -march=native -o bench bench.cpp -lbenchmark
 $ ./bench
 ```
 
@@ -84,24 +84,27 @@ Running on my laptop with:
 - Intel turbo-boost turned off from BIOS
 - Intel speedstep turned off from BIOS
 - powersaving disabled via `cpupower frequency-set --governor performance`
+- compilation options `-O3 -march=native`
 - system otherwise idle
 
 ```
-2023-04-23T18:53:52-06:00
+2023-04-29T11:30:53-06:00
 Running ./bench
-Run on (8 X 2300.16 MHz CPU s)
+Run on (8 X 2300.01 MHz CPU s)
 CPU Caches:
   L1 Data 32 KiB (x8)
   L1 Instruction 32 KiB (x8)
   L2 Unified 256 KiB (x8)
   L3 Unified 16384 KiB (x1)
-Load Average: 0.40, 0.49, 0.51
--------------------------------------------------------------------
-Benchmark                         Time             CPU   Iterations
--------------------------------------------------------------------
-Baseline                      75501 ns        75456 ns         9265
-BaselineSimpleSinh            37879 ns        37858 ns        18483
-Bulk                          76428 ns        76385 ns         9161
-BulkIgnoreMask                70023 ns        69982 ns         9972
-BulkIgnoreMaskSimpleSinh      32921 ns        32902 ns        21246
+Load Average: 0.31, 0.41, 0.59
+--------------------------------------------------------------------
+Benchmark                          Time             CPU   Iterations
+--------------------------------------------------------------------
+Baseline                       72254 ns        72212 ns         9693
+BaselineSimpleSinh             34524 ns        34505 ns        20257
+BaselinePowerSeries            20943 ns        20931 ns        33447
+Bulk                           73186 ns        73144 ns         9540
+BulkIgnoreMask                 70542 ns        70499 ns         9875
+BulkIgnoreMaskSimpleSinh       33918 ns        33897 ns        20682
+BulkIgnoreMaskPowerSeries      17440 ns        17430 ns        40146
 ```
