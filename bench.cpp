@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <sleef.h>
+
 struct Input {
   std::size_t bulkSize;
   std::vector<bool> eventMask;
@@ -286,6 +288,62 @@ static void BaselineSinhCephes(benchmark::State &state) {
   SanityCheck(results);
 }
 BENCHMARK(BaselineSinhCephes);
+
+template <typename T>
+T InvMassBaselineSLEEF(const T *pt, const T *eta, const T *phi,
+                       const T *mass, std::size_t size) {
+  T x_sum = 0.;
+  T y_sum = 0.;
+  T z_sum = 0.;
+  T e_sum = 0.;
+
+  for (std::size_t i = 0u; i < size; ++i) {
+    // Convert to (e, x, y, z) coordinate system and update sums
+    const auto sincos = Sleef_sincosf_u35(phi[i]);
+    const auto x = pt[i] * sincos.y;
+    x_sum += x;
+    const auto y = pt[i] * sincos.x;
+    y_sum += y;
+    const auto z = pt[i] * Sleef_sinhf_u35(eta[i]);
+    z_sum += z;
+    const auto e = std::sqrt(x * x + y * y + z * z + mass[i] * mass[i]);
+    e_sum += e;
+  }
+
+  // Return invariant mass with (+, -, -, -) metric
+  return std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                   z_sum * z_sum);
+}
+
+static void EvalLoopSLEEF(std::size_t bulkSize,
+                          const std::vector<bool> &eventMask, float *pts,
+                          float *etas, float *phis, float *masses,
+                          std::size_t *sizes,
+                          std::vector<float> &results) {
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0ul; i < bulkSize; ++i) {
+    if (eventMask[i]) { // we don't have a value for this entry yet
+      results[i] = InvMassBaselineSLEEF(
+          pts + elementIdx, etas + elementIdx, phis + elementIdx,
+          masses + elementIdx, sizes[i]);
+    }
+    elementIdx += sizes[i];
+  }
+}
+
+static void BaselineSLEEF(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    EvalLoopSLEEF(input.bulkSize, input.eventMask, input.pts, input.etas,
+                  input.phis, input.masses, input.sizes, results);
+    // to force writing to memory of results
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BaselineSLEEF);
 
 template <typename T>
 T InvMassBaselinePowerSeries(const T *pt, const T *eta, const T *phi,
@@ -612,6 +670,81 @@ static void BulkIgnoreMaskSinhCephes(benchmark::State &state) {
   SanityCheck(results);
 }
 BENCHMARK(BulkIgnoreMaskSinhCephes);
+
+template <typename T>
+void InvMassBulkIgnoreMaskSLEEF(const std::vector<bool> &eventMask,
+                                std::size_t bulkSize,
+                                std::vector<T> &results, const T *pt,
+                                const T *eta, const T *phi, const T *mass,
+                                const std::size_t *sizes) {
+
+  const auto nElements = std::accumulate(sizes, sizes + bulkSize, 0u);
+
+  std::vector<T> xs(nElements);
+  std::vector<T> ys(nElements);
+  std::vector<T> zs(nElements);
+  std::vector<T> es(nElements);
+
+  // trigonometric functions are expensive and don't vectorize so we only call
+  // them when needed
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0u; i < bulkSize; ++i) {
+    const auto size = sizes[i];
+    if (eventMask[i]) {
+      for (std::size_t j = 0u; j < size; ++j) {
+        const auto pt_ = pt[elementIdx + j];
+        const auto phi_ = phi[elementIdx + j];
+        const auto sincos = Sleef_sincosf_u35(phi_);
+        xs[elementIdx + j] = pt_ * sincos.y;
+        ys[elementIdx + j] = pt_ * sincos.x;
+        zs[elementIdx + j] = pt_ * Sleef_sinhf_u35(eta[elementIdx + j]);
+      }
+    }
+    elementIdx += size;
+  }
+
+  // looks like the CPU is happier by calculating these for all elements, even
+  // if we'll discard many of the results...
+  for (std::size_t i = 0; i < nElements; ++i) {
+    es[i] = std::sqrt(pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i]);
+  }
+
+  elementIdx = 0u;
+  for (std::size_t i = 0; i < bulkSize; ++i) {
+    T x_sum = 0.;
+    T y_sum = 0.;
+    T z_sum = 0.;
+    T e_sum = 0.;
+    const auto size = sizes[i];
+    if (eventMask[i]) {
+      for (std::size_t j = 0u; j < sizes[i]; ++j) {
+        const auto idx = elementIdx + j;
+        x_sum += xs[idx];
+        y_sum += ys[idx];
+        z_sum += zs[idx];
+        e_sum += es[idx];
+      }
+      results[i] = std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                             z_sum * z_sum);
+    }
+    elementIdx += size;
+  }
+}
+
+static void BulkIgnoreMaskSLEEF(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    InvMassBulkIgnoreMaskSLEEF(input.eventMask, input.bulkSize, results,
+                               input.pts, input.etas, input.phis,
+                               input.masses, input.sizes);
+    // to force writing to memory of results
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BulkIgnoreMaskSLEEF);
 
 template <typename T>
 void InvMassBulkIgnoreMaskPowerSeries(const std::vector<bool> &eventMask,
