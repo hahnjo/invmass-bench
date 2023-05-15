@@ -760,6 +760,7 @@ void InvMassBulkIgnoreMaskSLEEFsimd(const std::vector<bool> &eventMask,
   std::vector<T> zs(nElements);
   std::vector<T> es(nElements);
 
+#if 1
   #pragma omp simd
   for (std::size_t i = 0; i < nElements; ++i) {
     const auto pt_ = pt[i];
@@ -772,6 +773,55 @@ void InvMassBulkIgnoreMaskSLEEFsimd(const std::vector<bool> &eventMask,
     ys[i] = pt_ * Sleef_sinf_u35(phi_);
     zs[i] = pt_ * Sleef_sinhf_u35(eta[i]);
   }
+#else
+#if 1
+  std::size_t j;
+  for (j = 0u; j + 8 < nElements; j += 8) {
+    const auto pt_ = _mm256_loadu_ps(&pt[j]);
+    const auto phi_ = _mm256_loadu_ps(&phi[j]);
+    const auto sincos = Sleef_sincosf8_u35(phi_);
+    const auto xs_ = _mm256_mul_ps(pt_, sincos.y);
+    _mm256_storeu_ps(&xs[j], xs_);
+    const auto ys_ = _mm256_mul_ps(pt_, sincos.x);
+    _mm256_storeu_ps(&ys[j], ys_);
+    const auto eta_ = _mm256_loadu_ps(&eta[j]);
+    const auto sinh_eta_ = Sleef_sinhf8_u35(eta_);
+    const auto zs_ = _mm256_mul_ps(pt_, sinh_eta_);
+    _mm256_storeu_ps(&zs[j], zs_);
+  }
+  for (; j < nElements; ++j) {
+    const auto pt_ = pt[j];
+    const auto phi_ = phi[j];
+    auto sincos = Sleef_sincosf_u35(phi_);
+    xs[j] = pt_ * sincos.y;
+    ys[j] = pt_ * sincos.x;
+    zs[j] = pt_ * Sleef_sinhf_u35(eta[j]);
+  }
+#else
+  std::size_t j;
+  for (j = 0u; j + 4 < nElements; j += 4) {
+    const auto pt_ = _mm_loadu_ps(&pt[j]);
+    const auto phi_ = _mm_loadu_ps(&phi[j]);
+    const auto sincos = Sleef_sincosf4_u35(phi_);
+    const auto xs_ = _mm_mul_ps(pt_, sincos.y);
+    _mm_storeu_ps(&xs[j], xs_);
+    const auto ys_ = _mm_mul_ps(pt_, sincos.x);
+    _mm_storeu_ps(&ys[j], ys_);
+    const auto eta_ = _mm_loadu_ps(&eta[j]);
+    const auto sinh_eta_ = Sleef_sinhf4_u35(eta_);
+    const auto zs_ = _mm_mul_ps(pt_, sinh_eta_);
+    _mm_storeu_ps(&zs[j], zs_);
+  }
+  for (; j < nElements; ++j) {
+    const auto pt_ = pt[j];
+    const auto phi_ = phi[j];
+    auto sincos = Sleef_sincosf_u35(phi_);
+    xs[j] = pt_ * sincos.y;
+    ys[j] = pt_ * sincos.x;
+    zs[j] = pt_ * Sleef_sinhf_u35(eta[j]);
+  }
+#endif
+#endif
 
   // looks like the CPU is happier by calculating these for all elements, even
   // if we'll discard many of the results...
