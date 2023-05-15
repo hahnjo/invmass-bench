@@ -747,6 +747,76 @@ static void BulkIgnoreMaskSLEEF(benchmark::State &state) {
 BENCHMARK(BulkIgnoreMaskSLEEF);
 
 template <typename T>
+void InvMassBulkIgnoreMaskSLEEFsimd(const std::vector<bool> &eventMask,
+                                    std::size_t bulkSize,
+                                    std::vector<T> &results, const T *pt,
+                                    const T *eta, const T *phi, const T *mass,
+                                    const std::size_t *sizes) {
+
+  const auto nElements = std::accumulate(sizes, sizes + bulkSize, 0u);
+
+  std::vector<T> xs(nElements);
+  std::vector<T> ys(nElements);
+  std::vector<T> zs(nElements);
+  std::vector<T> es(nElements);
+
+  #pragma omp simd
+  for (std::size_t i = 0; i < nElements; ++i) {
+    const auto pt_ = pt[i];
+    const auto phi_ = phi[i];
+    // Do _NOT_ use sincosf because it cannot be auto-vectorized...
+    // const auto sincos_ = Sleef_sincosf_u35(phi_);
+    // xs[i] = pt_ * sincos_.y;
+    // ys[i] = pt_ * sincos_.x;
+    xs[i] = pt_ * Sleef_cosf_u35(phi_);
+    ys[i] = pt_ * Sleef_sinf_u35(phi_);
+    zs[i] = pt_ * Sleef_sinhf_u35(eta[i]);
+  }
+
+  // looks like the CPU is happier by calculating these for all elements, even
+  // if we'll discard many of the results...
+  for (std::size_t i = 0; i < nElements; ++i) {
+    es[i] = std::sqrt(pt[i] * pt[i] + zs[i] * zs[i] + mass[i] * mass[i]);
+  }
+
+  std::size_t elementIdx = 0u;
+  for (std::size_t i = 0; i < bulkSize; ++i) {
+    T x_sum = 0.;
+    T y_sum = 0.;
+    T z_sum = 0.;
+    T e_sum = 0.;
+    const auto size = sizes[i];
+    if (eventMask[i]) {
+      for (std::size_t j = 0u; j < sizes[i]; ++j) {
+        const auto idx = elementIdx + j;
+        x_sum += xs[idx];
+        y_sum += ys[idx];
+        z_sum += zs[idx];
+        e_sum += es[idx];
+      }
+      results[i] = std::sqrt(e_sum * e_sum - x_sum * x_sum - y_sum * y_sum -
+                             z_sum * z_sum);
+    }
+    elementIdx += size;
+  }
+}
+
+static void BulkIgnoreMaskSLEEFsimd(benchmark::State &state) {
+  std::vector<float> results(input.bulkSize);
+  benchmark::DoNotOptimize(results);
+  for (auto _ : state) {
+    InvMassBulkIgnoreMaskSLEEFsimd(input.eventMask, input.bulkSize, results,
+                               input.pts, input.etas, input.phis,
+                               input.masses, input.sizes);
+    // to force writing to memory of results
+    benchmark::ClobberMemory();
+  }
+
+  SanityCheck(results);
+}
+BENCHMARK(BulkIgnoreMaskSLEEFsimd);
+
+template <typename T>
 void InvMassBulkIgnoreMaskPowerSeries(const std::vector<bool> &eventMask,
                                       std::size_t bulkSize,
                                       std::vector<T> &results, const T *pt,
